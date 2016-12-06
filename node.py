@@ -1,7 +1,7 @@
 import mxnet as mx
 import numpy as np
 
-CTX = mx.cpu()
+CTX = mx.gpu()
 
 N_STATES = 13
 N_PLAYERS = 2
@@ -22,16 +22,20 @@ class PolicyMaker():
         self.n_children = n_children
         data = mx.sym.Concat(*feature, num_args=len(feature))
         flat = mx.sym.Flatten(data)
-        hid4 = mx.sym.FullyConnected(data=flat, num_hidden=n_children, name='%s_fc1'%node.name, no_bias=True)
-        self.out = mx.sym.SoftmaxActivation(hid4, mode='instance') # of shape (BATCH_SIZE, n_children)
+        hid1 = mx.sym.FullyConnected(data=flat, num_hidden=5, name='%s_fc1'%node.name, no_bias=True)
+        act1 = mx.sym.Activation(data=hid1, act_type='sigmoid')
+        hid2 = mx.sym.FullyConnected(data=act1, num_hidden=self.n_children, name='%s_fc2'%node.name, no_bias=True)
+        self.out = mx.sym.SoftmaxActivation(hid2, mode='instance') # of shape (BATCH_SIZE, n_children)
         self.out = mx.sym.SliceChannel(self.out, num_outputs=n_children, axis=1, squeeze_axis=True, name='slicechannel_%s'%node.name)
         self.arg_names = []
         self.arg_nds = []
-        for i in range(1):
+        for i in range(2):
             self.arg_names.append('%s_fc%d_weight'%(node.name, i+1))
 #            self.arg_names.append('%s_fc%d_bias'%(node.name, i+1))
-        self.arg_nds.append(mx.nd.zeros([n_children, len(feature)*2*13], CTX))
-        self.arg_nds.append(mx.nd.zeros([n_children], CTX))
+        self.arg_nds.append(mx.nd.zeros([5, len(feature)*2*13], CTX))
+#        self.arg_nds.append(mx.nd.zeros([80], CTX))
+        self.arg_nds.append(mx.nd.zeros([self.n_children, 5], CTX))
+#        self.arg_nds.append(mx.nd.zeros([self.n_children], CTX))
         self.arg_dict = dict([(name, nd) for name, nd in zip(self.arg_names, self.arg_nds)])
 
         initializer = mx.init.Normal(1e-3)
@@ -393,6 +397,8 @@ def train():
                 print
             print '\n'
         if count % 1000 == 0:
+            total_loss *= 0
+            total_count *= 0
             for dnode in param_nodes:
                 dnode.policy_maker.dump('model')
 
@@ -456,7 +462,6 @@ def test():
                     fl2s2, fl3s2, fl4s2, fl5s2,
                     fl2s3, fl3s3, fl4s3, fl5s3
                     ]
-                    
     param_nodes = [pf1d, pf2d, pf3d,
                     fl1d1, fl2d1, fl3d1, fl4d1,
                     fl1d2, fl2d2, fl3d2, fl4d2,
